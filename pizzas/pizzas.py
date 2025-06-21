@@ -6,7 +6,9 @@ import json
 import random
 import pygame
 
-RUTA_PEDIDOS = Path(__file__).parent / "pizzas" / "pedidos"
+RUTA_PEDIDOS = (Path(__file__).parent / "pedidos").resolve()
+print("Ruta absoluta esperada:", RUTA_PEDIDOS)
+print("¿Existe?", RUTA_PEDIDOS.exists())
 # --- Definición de Clases ---
 
 class Pizza:
@@ -24,11 +26,12 @@ class Pizza:
         return f"{self.tipo} ({self.tamano}s) - {self.estado}"
 
 class Pedido(th.Thread):
-    def __init__(self, id_pedido, pizzas, direccion):
+    def __init__(self, id_pedido, pizzas, direccion, cliente):
         super().__init__()
         self.id_pedido = id_pedido
         self.pizzas = pizzas
         self.ubicacion = direccion  # Tupla (x, y) o dirección
+        self.cliente = cliente 
         self.tiempo_registro = t.time()
         self.estado = "recibido"  # Estados: recibido, procesando, horneando, en_camino, entregado
         self.tiempo_entrega = None
@@ -264,8 +267,7 @@ pedidos = []
 def crear_pedido():
     return
 def get_pedidos_from_folder():
-    global pedidos
-    pedidos = []
+    global pedidos, RUTA_PEDIDOS
     archivos = list(RUTA_PEDIDOS.glob("pedido*.json"))
 
     archivos.sort(key=lambda p: int(p.stem.replace("pedido", "")))
@@ -274,7 +276,7 @@ def get_pedidos_from_folder():
         pedidos.append(Pedido.from_dict(data))
 
 get_pedidos_from_folder()
-print("Pedidos cargados:", [p.id_pedido for p in pedidos])
+
 #pantallas 
 HornoManager.iniciar_hornos(2)       # por ejemplo, 2 hornos
 DeliveryManager.iniciar_repartidores(2)  #
