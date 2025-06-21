@@ -1,7 +1,10 @@
 import threading as th
 import time as t
 import random
+import os 
+import json
 
+RUTA_PEDIDOS="pizzas\pedidos"
 # --- Definición de Clases ---
 
 class Pizza:
@@ -214,9 +217,33 @@ class Repartidor(th.Thread):
                 "estado": "Disponible",
                 "pedido_id": None
             }
+#VARIABELES GLOBALES
+pedidos = []
 
-# --- Inicialización del Sistema ---
+# Funciones para manejar pedidos desde archivos
+def crear_pedido():
+    global pedidos, nombre_archivo
+def get_pedidos_from_folder():
+    global pedidos, RUTA_PEDIDOS
+    pedidos = []
+    archivos = []
 
+    for filename in os.listdir(RUTA_PEDIDOS):
+        if filename.startswith("pedido") and filename.endswith(".json"):
+            num_str = filename[len("pedido"):-len(".json")]
+            if num_str.isdigit():
+                num = int(num_str)
+                archivos.append((num, filename))
+
+    archivos.sort(key=lambda x: x[0])
+
+    for _, filename in archivos:
+        path = os.path.join(RUTA_PEDIDOS, filename)
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            pedidos.append(Pedido.from_dict(data))
+
+    return pedidos
 
 import pygame
 import random
