@@ -217,12 +217,57 @@ class Repartidor(th.Thread):
                 "estado": "Disponible",
                 "pedido_id": None
             }
+
+class Pedido:
+    def __init__(self, cliente, pizzas):
+        if not isinstance(cliente, str) or not cliente.strip():
+            raise ValueError("Debe proporcionar un nombre de cliente válido.")
+        if not isinstance(pizzas, list) or not pizzas:
+            raise ValueError("Debe proporcionar una lista de pizzas.")
+        # Verifico que cada elemento de la lista sea instancia de Pizza
+        for p in pizzas:
+            if not isinstance(p, Pizza):
+                raise ValueError("Todos los elementos de 'pizzas' deben ser objetos Pizza.")
+        
+        self.cliente = cliente
+        self.pizzas = pizzas       # lista de instancias Pizza
+        self.estado = "recibido"   # recibido → procesando → horneando → listo → entregado (por ejemplo)
+        self.tiempo_registro = t.time()
+
+    def to_dict(self):
+        """Convierte el Pedido a un dict listo para serializar a JSON."""
+        return {
+            "cliente": self.cliente,
+            "estado": self.estado,
+            "tiempo_registro": self.tiempo_registro,
+            "pizzas": [
+                {"tamano": p.tamano, "tipo": p.tipo, "estado": p.estado}
+                for p in self.pizzas
+            ]
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        """Reconstruye un Pedido a partir de un dict (e.g. resultado de json.load)."""
+        pizzas = [Pizza(item["tamano"], item["tipo"]) for item in data.get("pizzas", [])]
+        pedido = cls(data["cliente"], pizzas)
+        pedido.estado = data.get("estado", pedido.estado)
+        pedido.tiempo_registro = data.get("tiempo_registro", pedido.tiempo_registro)
+        # Si en el JSON venía estado de cada pizza, lo aplicamos:
+        for p_obj, p_data in zip(pedido.pizzas, data.get("pizzas", [])):
+            p_obj.estado = p_data.get("estado", p_obj.estado)
+        return pedido
+
+    def __str__(self):
+        pizzas_str = ", ".join(str(p) for p in self.pizzas)
+        return f"Pedido para {self.cliente} → [{pizzas_str}] (Estado: {self.estado})"
+
 #VARIABELES GLOBALES
 pedidos = []
 
 # Funciones para manejar pedidos desde archivos
 def crear_pedido():
-    global pedidos, nombre_archivo
+    return
 def get_pedidos_from_folder():
     global pedidos, RUTA_PEDIDOS
     pedidos = []
