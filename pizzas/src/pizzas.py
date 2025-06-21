@@ -216,8 +216,6 @@ class Repartidor(th.Thread):
             }
 
 # --- Inicialización del Sistema ---
-HornoManager.iniciar_hornos(2)  # 2 hornos
-DeliveryManager.iniciar_repartidores(3)  # 3 repartidores
 
 
 import pygame
@@ -230,77 +228,11 @@ clock = pygame.time.Clock()
 font = pygame.font.SysFont(None, 24)
 
 # Almacén de pedidos activos
-pedidos_activos = []
-next_pedido_id = 1
 
 # Bucle principal
 running = True
 while running:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-        elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_n:  # Crear nuevo pedido con 'n'
-                pizzas = [
-                    Pizza(random.choice([5, 7, 10]), 
-                    random.choice(Pizza.TOPPINGS))
-                    for _ in range(random.randint(1, 3))
-                ]
-                ubicacion = (random.randint(0, 100), random.randint(0, 100))
-                nuevo_pedido = Pedido(next_pedido_id, pizzas, ubicacion)
-                pedidos_activos.append(nuevo_pedido)
-                next_pedido_id += 1
-    
-    # Limpiar pantalla
-    screen.fill((30, 30, 50))
-    
-    # Mostrar pedidos activos
-    y_offset = 50
-    for pedido in pedidos_activos:
-        estado = pedido.obtener_estado()
-        texto = f"Pedido #{estado['id']}: {estado['estado']} - {estado['tiempo_espera']:.1f}s"
-        text_surface = font.render(texto, True, (255, 255, 255))
-        screen.blit(text_surface, (50, y_offset))
-        
-        # Mostrar pizzas
-        for i, pizza in enumerate(estado['pizzas']):
-            pizza_text = font.render(f" - {pizza}", True, (200, 200, 200))
-            screen.blit(pizza_text, (70, y_offset + 25 + i * 25))
-        
-        y_offset += 100 + len(estado['pizzas']) * 25
-    
-    # Mostrar estado de hornos
-    horno_y = 50
-    for estado_horno in HornoManager.obtener_progreso_hornos():
-        if estado_horno['pizza']:
-            texto = f"Horno {estado_horno['id_horno']}: {estado_horno['progreso']:.0f}% - {estado_horno['pizza']}"
-            color = (255, 200, 100)
-        else:
-            texto = f"Horno {estado_horno['id_horno']}: Inactivo"
-            color = (150, 150, 150)
-        
-        text_surface = font.render(texto, True, color)
-        screen.blit(text_surface, (400, horno_y))
-        
-        # Dibujar barra de progreso
-        if estado_horno['pizza']:
-            pygame.draw.rect(screen, (100, 100, 100), (400, horno_y + 25, 200, 20))
-            pygame.draw.rect(screen, (0, 200, 0), (400, horno_y + 25, 200 * estado_horno['progreso']/100, 20))
-        
-        horno_y += 50
-    
-    # Mostrar repartidores
-    rep_y = 250
-    for estado_rep in DeliveryManager.obtener_estado_repartidores():
-        texto = f"Repartidor {estado_rep['id_repartidor']}: {estado_rep['estado']}"
-        text_surface = font.render(texto, True, (100, 200, 255))
-        screen.blit(text_surface, (400, rep_y))
-        rep_y += 40
-    
-    # Limpiar pedidos completados
-    pedidos_activos = [p for p in pedidos_activos if p.estado != "entregado"]
-    
-    pygame.display.flip()
+
     clock.tick(60)
 
 pygame.quit()
