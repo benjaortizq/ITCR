@@ -1,0 +1,14 @@
+{
+  "id_pedido": 123456,
+  "cliente": "Juan Pérez",
+  "pizzas": [
+    { "tamano": 10, "tipo": "pepperoni",   "estado": "crudo"    },
+    { "tamano": 8,  "tipo": "vegetariana", "estado": "listo"    }
+  ],
+  "direccion": "Calle Falsa 123, San José",
+  "tiempo_registro": 1719001234.567,
+  "estado": "horneando",
+  "tiempo_entrega": null,
+  "tiempo_salida": 1719001240.000,  
+  "eta": null                      
+}

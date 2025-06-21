@@ -1,10 +1,12 @@
 import threading as th
 import time as t
 import random
-import os 
+from pathlib import Path
 import json
+import random
+import pygame
 
-RUTA_PEDIDOS="pizzas\pedidos"
+RUTA_PEDIDOS = Path(__file__).parent / "pizzas" / "pedidos"
 # --- Definición de Clases ---
 
 class Pizza:
@@ -22,14 +24,16 @@ class Pizza:
         return f"{self.tipo} ({self.tamano}s) - {self.estado}"
 
 class Pedido(th.Thread):
-    def __init__(self, id_pedido, pizzas, ubicacion):
+    def __init__(self, id_pedido, pizzas, direccion):
         super().__init__()
         self.id_pedido = id_pedido
         self.pizzas = pizzas
-        self.ubicacion = ubicacion  # Tupla (x, y) o dirección
+        self.ubicacion = direccion  # Tupla (x, y) o dirección
         self.tiempo_registro = t.time()
         self.estado = "recibido"  # Estados: recibido, procesando, horneando, en_camino, entregado
         self.tiempo_entrega = None
+        self.tiempo_salida = None
+        self.eta = None
         self.daemon = True
         self.lock = th.Lock()
         self.start()
@@ -59,6 +63,11 @@ class Pedido(th.Thread):
     def actualizar_estado(self, nuevo_estado):
         with self.lock:
             self.estado = nuevo_estado
+            if nuevo_estado == "en_camino":
+                self.tiempo_salida = t.time()
+                # misma fórmula que en el Repartidor
+                distancia = random.uniform(3.0, 8.0)
+                self.eta = distancia * 2
     
     def todas_pizzas_listas(self):
         return all(pizza.estado == "listo" for pizza in self.pizzas)
@@ -72,7 +81,36 @@ class Pedido(th.Thread):
                 "tiempo_espera": t.time() - self.tiempo_registro,
                 "pizzas": [str(p) for p in self.pizzas]
             }
+    def to_dict(self):
+        return {
+            "id_pedido": self.id_pedido,
+            "cliente": self.cliente,
+            "pizzas": [
+                {"tamano": p.tamano, "tipo": p.tipo, "estado": p.estado}
+                for p in self.pizzas
+            ],
+            "direccion": self.ubicacion,
+            "tiempo_registro": self.tiempo_registro,
+            "estado": self.estado,
+            "tiempo_entrega": self.tiempo_entrega,
+            "tiempo_salida": self.tiempo_salida,
+            "eta": self.eta,
+        }
+    @classmethod
+    def from_dict(cls, data):
+        pizzas = []
+        for pd in data.get("pizzas", []):
+            pizza = Pizza(pd["tamano"], pd["tipo"])
+            pizza.estado = pd.get("estado", pizza.estado)
+            pizzas.append(pizza)
 
+        pedido = cls( id_pedido=data["id_pedido"],cliente=data["cliente"],pizzas=pizzas,direccion=data["direccion"])
+        pedido.tiempo_registro = data.get("tiempo_registro", pedido.tiempo_registro)
+        pedido.estado          = data.get("estado", pedido.estado)
+        pedido.tiempo_entrega  = data.get("tiempo_entrega", pedido.tiempo_entrega)
+        pedido.tiempo_salida   = data.get("tiempo_salida", pedido.tiempo_salida)
+        pedido.eta             = data.get("eta", pedido.eta)
+        return pedido
 class HornoManager:
     hornos = []
     cola_pedidos = []
@@ -218,49 +256,6 @@ class Repartidor(th.Thread):
                 "pedido_id": None
             }
 
-class Pedido:
-    def __init__(self, cliente, pizzas):
-        if not isinstance(cliente, str) or not cliente.strip():
-            raise ValueError("Debe proporcionar un nombre de cliente válido.")
-        if not isinstance(pizzas, list) or not pizzas:
-            raise ValueError("Debe proporcionar una lista de pizzas.")
-        # Verifico que cada elemento de la lista sea instancia de Pizza
-        for p in pizzas:
-            if not isinstance(p, Pizza):
-                raise ValueError("Todos los elementos de 'pizzas' deben ser objetos Pizza.")
-        
-        self.cliente = cliente
-        self.pizzas = pizzas       # lista de instancias Pizza
-        self.estado = "recibido"   # recibido → procesando → horneando → listo → entregado (por ejemplo)
-        self.tiempo_registro = t.time()
-
-    def to_dict(self):
-        """Convierte el Pedido a un dict listo para serializar a JSON."""
-        return {
-            "cliente": self.cliente,
-            "estado": self.estado,
-            "tiempo_registro": self.tiempo_registro,
-            "pizzas": [
-                {"tamano": p.tamano, "tipo": p.tipo, "estado": p.estado}
-                for p in self.pizzas
-            ]
-        }
-
-    @classmethod
-    def from_dict(cls, data):
-        """Reconstruye un Pedido a partir de un dict (e.g. resultado de json.load)."""
-        pizzas = [Pizza(item["tamano"], item["tipo"]) for item in data.get("pizzas", [])]
-        pedido = cls(data["cliente"], pizzas)
-        pedido.estado = data.get("estado", pedido.estado)
-        pedido.tiempo_registro = data.get("tiempo_registro", pedido.tiempo_registro)
-        # Si en el JSON venía estado de cada pizza, lo aplicamos:
-        for p_obj, p_data in zip(pedido.pizzas, data.get("pizzas", [])):
-            p_obj.estado = p_data.get("estado", p_obj.estado)
-        return pedido
-
-    def __str__(self):
-        pizzas_str = ", ".join(str(p) for p in self.pizzas)
-        return f"Pedido para {self.cliente} → [{pizzas_str}] (Estado: {self.estado})"
 
 #VARIABELES GLOBALES
 pedidos = []
@@ -269,29 +264,64 @@ pedidos = []
 def crear_pedido():
     return
 def get_pedidos_from_folder():
-    global pedidos, RUTA_PEDIDOS
+    global pedidos
     pedidos = []
-    archivos = []
+    archivos = list(RUTA_PEDIDOS.glob("pedido*.json"))
 
-    for filename in os.listdir(RUTA_PEDIDOS):
-        if filename.startswith("pedido") and filename.endswith(".json"):
-            num_str = filename[len("pedido"):-len(".json")]
-            if num_str.isdigit():
-                num = int(num_str)
-                archivos.append((num, filename))
+    archivos.sort(key=lambda p: int(p.stem.replace("pedido", "")))
+    for archivo in archivos:
+        data = json.loads(archivo.read_text(encoding="utf-8"))
+        pedidos.append(Pedido.from_dict(data))
 
-    archivos.sort(key=lambda x: x[0])
+get_pedidos_from_folder()
+print("Pedidos cargados:", [p.id_pedido for p in pedidos])
+#pantallas 
+HornoManager.iniciar_hornos(2)       # por ejemplo, 2 hornos
+DeliveryManager.iniciar_repartidores(2)  #
+def pizza_tracker(surface, font):
+    global pedidos
 
-    for _, filename in archivos:
-        path = os.path.join(RUTA_PEDIDOS, filename)
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            pedidos.append(Pedido.from_dict(data))
+    x, y = 10, 10
+    ancho_barra, alto_barra = 200, 12
+    padding = 6
+    ahora = t.time()
 
-    return pedidos
+    for pedido in pedidos:
+        if pedido.estado == "entregado":
+            continue
 
-import pygame
-import random
+        # Texto: ID y estado
+        texto = f"#{pedido.id_pedido} – {pedido.estado}"
+        txt_surf = font.render(texto, True, (255,255,255))
+        surface.blit(txt_surf, (x, y))
+        y += txt_surf.get_height() + 4
+
+        # 1) Progreso HORNO (% pizzas listas)
+        total = len(pedido.pizzas)
+        listas = sum(1 for p in pedido.pizzas if p.estado == "listo")
+        prog_horno = listas / total if total else 0
+
+        # dibujar fondo y barra
+        pygame.draw.rect(surface, (50,50,50), (x, y, ancho_barra, alto_barra))
+        pygame.draw.rect(surface, (200,100,0),
+                         (x, y, int(ancho_barra * prog_horno), alto_barra))
+        y += alto_barra + 2
+
+        # 2) Progreso REPARTO (solo si ya salió)
+        if pedido.estado == "en_camino" and pedido.tiempo_salida and pedido.eta:
+            delta = ahora - pedido.tiempo_salida
+            prog_reparto = min(delta / pedido.eta, 1.0)
+        else:
+            prog_reparto = 0
+
+        pygame.draw.rect(surface, (50,50,50), (x, y, ancho_barra, alto_barra))
+        pygame.draw.rect(surface, (0,200,100),
+                         (x, y, int(ancho_barra * prog_reparto), alto_barra))
+        y += alto_barra + padding
+
+        # Si ya está completo, salto un poco más
+        if pedido.estado == "entregado":
+            y += padding
 
 # Inicialización
 pygame.init()
@@ -299,11 +329,17 @@ screen = pygame.display.set_mode((800, 600))
 clock = pygame.time.Clock()
 font = pygame.font.SysFont(None, 24)
 
-# Almacén de pedidos activos
+
 
 # Bucle principal
 running = True
 while running:
+    if event := pygame.event.poll():
+        if event.type == pygame.QUIT:
+            running = False 
+    screen.fill((30, 30, 30))  # Fondo oscuro
+    pizza_tracker(screen, font)     
+    pygame.display.flip()  # Actualizar pantalla
 
     clock.tick(60)
 
